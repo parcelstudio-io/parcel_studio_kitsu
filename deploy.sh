@@ -94,6 +94,6 @@ echo "   Then visit: http://localhost:8001/api/v1/namespaces/kubernetes-dashboar
 echo "🗄️  Initializing database..."
 kubectl exec -it deployment/kitsu-zou -- python zou/cli.py init-db
 kubectl exec -it deployment/kitsu-zou -- python zou/cli.py init-data
-kubectl exec -it deployment/kitsu-zou -- python zou/cli.py create-admin admin@parcelstudio.com --password=parcelstudio2024
+kubectl exec -it deployment/kitsu-zou -- python zou/cli.py create-admin admin@parcelstudio.com --password=parcelstudio2025
 
 echo "🚀 Deployment complete! Your team can now access Kitsu at http://$EXTERNAL_IP"
