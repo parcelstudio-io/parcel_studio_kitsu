@@ -1,0 +1,80 @@
+# Kitsu Installation Documentation
+
+## Overview
+Kitsu is a production management web application built for animation studios. It helps track tasks, assets, shots, and team collaboration in animation and VFX pipelines.
+
+## Architecture
+- Frontend: Vue.js framework with Vuex state management and vue-router
+- Backend: Zou (database API)
+- Optional: Zou Events for real-time updates
+
+## Prerequisites
+- Node.js version >= 20.18
+- Zou development instance running on port 5000
+- Optional: Zou Events development instance on port 5001
+
+## Development Environment Setup
+
+### 1. Clone Repository
+```bash
+git clone https://github.com/cgwire/kitsu.git
+cd kitsu
+```
+
+### 2. Install Dependencies
+```bash
+npm install
+```
+
+### 3. Configure Environment Variables (Optional)
+Create environment configuration if needed:
+- `KITSU_API_TARGET`: API URL (default: http://localhost:5000)
+- `KITSU_EVENT_TARGET`: Event stream URL (default: http://localhost:5001)
+
+### 4. Start Development Environment
+```bash
+npm run dev
+```
+- Accessible at http://localhost:8080
+- Automatic page updates on file changes
+
+### 5. Additional Commands
+```bash
+# Build for production
+npm run build
+
+# Run unit tests
+npm run test:unit
+```
+
+## Quick Start with Docker
+For a complete Kitsu + Zou setup:
+```bash
+docker run -d -p 80:80 --name cgwire cgwire/cgwire
+```
+- Access at http://localhost
+- Default Credentials: admin@example.com / mysecretpassword
+
+## Production Deployment Options
+
+### Cloud Hosting
+- If hosted by CGWire, no installation required
+- Simply connect via provided URL
+
+### Self-Hosting
+- Requires Zou backend installation
+- Docker deployment recommended for production
+- Ensure proper database configuration
+- Configure reverse proxy for production use
+
+## Important Notes
+- Zou backend must be running before starting Kitsu frontend
+- For production use, both Zou and Zou Events should be properly configured
+- Refer to Zou documentation for detailed backend installation
+- Kitsu emphasizes testable state management logic
+- Component-based modular architecture for maintainability
+
+## Default Access
+- Development: http://localhost:8080
+- Docker deployment: http://localhost
+- Production: Configure according to your domain setup

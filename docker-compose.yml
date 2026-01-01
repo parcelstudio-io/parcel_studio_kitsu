@@ -1,0 +1,97 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_DB: zoudb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-mysecretpassword}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - kitsu-network
+
+  redis:
+    image: redis:6
+    networks:
+      - kitsu-network
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.8.3
+    environment:
+      MEILI_ENV: 'production'
+      MEILI_MASTER_KEY: ${INDEXER_KEY:-meilimasterkey}
+    volumes:
+      - meilisearch_data:/meili_data
+    networks:
+      - kitsu-network
+
+  zou:
+    image: cgwire/zou:latest
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: postgres
+      DB_PASSWORD: ${DB_PASSWORD:-mysecretpassword}
+      DB_DATABASE: zoudb
+      KV_HOST: redis
+      KV_PORT: 6379
+      INDEXER_HOST: meilisearch
+      INDEXER_PORT: 7700
+      INDEXER_KEY: ${INDEXER_KEY:-meilimasterkey}
+      SECRET_KEY: ${SECRET_KEY:-parcelstudiosecretkey}
+      PREVIEW_FOLDER: /opt/zou/previews
+    volumes:
+      - zou_previews:/opt/zou/previews
+    ports:
+      - "5000:5000"
+    depends_on:
+      - postgres
+      - redis
+      - meilisearch
+    networks:
+      - kitsu-network
+
+  zou-events:
+    image: cgwire/zou:latest
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: postgres
+      DB_PASSWORD: ${DB_PASSWORD:-mysecretpassword}
+      DB_DATABASE: zoudb
+      KV_HOST: redis
+      KV_PORT: 6379
+      SECRET_KEY: ${SECRET_KEY:-parcelstudiosecretkey}
+    ports:
+      - "5001:5001"
+    depends_on:
+      - postgres
+      - redis
+      - zou
+    networks:
+      - kitsu-network
+    command: gunicorn --worker-class geventwebsocket.gunicorn.workers.GeventWebSocketWorker -b 0.0.0.0:5001 zou.events:app
+
+  kitsu:
+    image: cgwire/kitsu:latest
+    environment:
+      KITSU_API_TARGET: http://zou:5000
+      KITSU_EVENT_TARGET: http://zou-events:5001
+    ports:
+      - "80:80"
+    depends_on:
+      - zou
+      - zou-events
+    networks:
+      - kitsu-network
+
+volumes:
+  postgres_data:
+  meilisearch_data:
+  zou_previews:
+
+networks:
+  kitsu-network:
+    driver: bridge

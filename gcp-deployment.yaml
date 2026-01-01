@@ -1,0 +1,370 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kitsu-postgres
+  labels:
+    app: kitsu-postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kitsu-postgres
+  template:
+    metadata:
+      labels:
+        app: kitsu-postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:13
+        env:
+        - name: POSTGRES_DB
+          value: "zoudb"
+        - name: POSTGRES_USER
+          value: "postgres"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: kitsu-secrets
+              key: db-password
+        ports:
+        - containerPort: 5432
+        volumeMounts:
+        - name: postgres-storage
+          mountPath: /var/lib/postgresql/data
+      volumes:
+      - name: postgres-storage
+        persistentVolumeClaim:
+          claimName: postgres-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+spec:
+  selector:
+    app: kitsu-postgres
+  ports:
+    - protocol: TCP
+      port: 5432
+      targetPort: 5432
+  type: ClusterIP
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kitsu-redis
+  labels:
+    app: kitsu-redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kitsu-redis
+  template:
+    metadata:
+      labels:
+        app: kitsu-redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:6
+        ports:
+        - containerPort: 6379
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+spec:
+  selector:
+    app: kitsu-redis
+  ports:
+    - protocol: TCP
+      port: 6379
+      targetPort: 6379
+  type: ClusterIP
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kitsu-meilisearch
+  labels:
+    app: kitsu-meilisearch
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kitsu-meilisearch
+  template:
+    metadata:
+      labels:
+        app: kitsu-meilisearch
+    spec:
+      containers:
+      - name: meilisearch
+        image: getmeili/meilisearch:v1.8.3
+        env:
+        - name: MEILI_ENV
+          value: "production"
+        - name: MEILI_MASTER_KEY
+          valueFrom:
+            secretKeyRef:
+              name: kitsu-secrets
+              key: indexer-key
+        ports:
+        - containerPort: 7700
+        volumeMounts:
+        - name: meilisearch-storage
+          mountPath: /meili_data
+      volumes:
+      - name: meilisearch-storage
+        persistentVolumeClaim:
+          claimName: meilisearch-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: meilisearch-service
+spec:
+  selector:
+    app: kitsu-meilisearch
+  ports:
+    - protocol: TCP
+      port: 7700
+      targetPort: 7700
+  type: ClusterIP
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kitsu-zou
+  labels:
+    app: kitsu-zou
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kitsu-zou
+  template:
+    metadata:
+      labels:
+        app: kitsu-zou
+    spec:
+      containers:
+      - name: zou
+        image: cgwire/zou:latest
+        env:
+        - name: DB_HOST
+          value: "postgres-service"
+        - name: DB_PORT
+          value: "5432"
+        - name: DB_USERNAME
+          value: "postgres"
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: kitsu-secrets
+              key: db-password
+        - name: DB_DATABASE
+          value: "zoudb"
+        - name: KV_HOST
+          value: "redis-service"
+        - name: KV_PORT
+          value: "6379"
+        - name: INDEXER_HOST
+          value: "meilisearch-service"
+        - name: INDEXER_PORT
+          value: "7700"
+        - name: INDEXER_KEY
+          valueFrom:
+            secretKeyRef:
+              name: kitsu-secrets
+              key: indexer-key
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: kitsu-secrets
+              key: secret-key
+        - name: PREVIEW_FOLDER
+          value: "/opt/zou/previews"
+        ports:
+        - containerPort: 5000
+        volumeMounts:
+        - name: zou-previews
+          mountPath: /opt/zou/previews
+      volumes:
+      - name: zou-previews
+        persistentVolumeClaim:
+          claimName: zou-previews-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zou-service
+spec:
+  selector:
+    app: kitsu-zou
+  ports:
+    - protocol: TCP
+      port: 5000
+      targetPort: 5000
+  type: ClusterIP
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kitsu-zou-events
+  labels:
+    app: kitsu-zou-events
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kitsu-zou-events
+  template:
+    metadata:
+      labels:
+        app: kitsu-zou-events
+    spec:
+      containers:
+      - name: zou-events
+        image: cgwire/zou:latest
+        env:
+        - name: DB_HOST
+          value: "postgres-service"
+        - name: DB_PORT
+          value: "5432"
+        - name: DB_USERNAME
+          value: "postgres"
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: kitsu-secrets
+              key: db-password
+        - name: DB_DATABASE
+          value: "zoudb"
+        - name: KV_HOST
+          value: "redis-service"
+        - name: KV_PORT
+          value: "6379"
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: kitsu-secrets
+              key: secret-key
+        ports:
+        - containerPort: 5001
+        command: ["gunicorn"]
+        args: ["--worker-class", "geventwebsocket.gunicorn.workers.GeventWebSocketWorker", "-b", "0.0.0.0:5001", "zou.events:app"]
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zou-events-service
+spec:
+  selector:
+    app: kitsu-zou-events
+  ports:
+    - protocol: TCP
+      port: 5001
+      targetPort: 5001
+  type: ClusterIP
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kitsu-frontend
+  labels:
+    app: kitsu-frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: kitsu-frontend
+  template:
+    metadata:
+      labels:
+        app: kitsu-frontend
+    spec:
+      containers:
+      - name: kitsu
+        image: cgwire/kitsu:latest
+        env:
+        - name: KITSU_API_TARGET
+          value: "http://zou-service:5000"
+        - name: KITSU_EVENT_TARGET
+          value: "http://zou-events-service:5001"
+        ports:
+        - containerPort: 80
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kitsu-frontend-service
+spec:
+  selector:
+    app: kitsu-frontend
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+  type: LoadBalancer
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: meilisearch-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: zou-previews-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: kitsu-secrets
+type: Opaque
+stringData:
+  db-password: "parcelstudio2024secure"
+  indexer-key: "parcelstudiomeilisearchkey"
+  secret-key: "parcelstudiosecretkey2024"

@@ -1,0 +1,254 @@
+# Kitsu Complete Setup Guide
+
+## Overview
+This guide covers the complete setup of Kitsu (frontend) and Zou (backend API) for local development and cloud deployment. Both Zou development and Zou Events services need to be running for full functionality.
+
+## Prerequisites
+- Python 3.x
+- Node.js >= 20.18
+- Docker (recommended)
+- Git
+
+## Part 1: Zou Backend Setup (Required)
+
+### 1.1 Database Setup (Docker - Recommended)
+```bash
+# Start PostgreSQL
+sudo docker run --name postgres -p 5432:5432 -e POSTGRES_PASSWORD=mysecretpassword -d postgres
+
+# Start Redis (Key-Value Store)
+sudo docker run --name redis -p 6379:6379 -d redis
+
+# Start Meilisearch (Search Engine)
+sudo docker run -it --rm --name meilisearch -p 7700:7700 \
+    -e MEILI_ENV='development' \
+    -e MEILI_MASTER_KEY='meilimasterkey' \
+    -v $(pwd)/meili_data:/meili_data \
+    -d getmeili/meilisearch:v1.8.3
+```
+
+### 1.2 Zou Installation
+```bash
+# Install virtualenvwrapper
+pip install virtualenvwrapper
+
+# Create and activate virtual environment
+mkvirtualenv zou
+workon zou
+
+# Clone Zou repository
+git clone https://github.com/cgwire/zou.git
+cd zou
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+### 1.3 Database Initialization
+```bash
+# Initialize database
+python zou/cli.py clear-db
+python zou/cli.py init-db
+python zou/cli.py init-data
+
+# Create admin user
+python zou/cli.py create-admin admin@example.com --password=mysecretpassword
+```
+
+### 1.4 Environment Variables for Zou
+Create `.env` file or export these variables:
+```bash
+export DB_HOST=localhost
+export DB_PORT=5432
+export DB_USERNAME=postgres
+export DB_PASSWORD=mysecretpassword
+export DB_DATABASE=zoudb
+export KV_HOST=localhost
+export KV_PORT=6379
+export INDEXER_KEY=meilimasterkey
+export INDEXER_HOST=localhost
+export INDEXER_PORT=7700
+export SECRET_KEY=mysecretkey
+export PREVIEW_FOLDER=$PWD/previews
+export DEBUG=1
+export MAIL_DEBUG=1
+export FLASK_DEBUG=1
+export FLASK_APP=zou.app
+```
+
+### 1.5 Start Zou Development Server (Port 5000)
+```bash
+workon zou
+cd zou
+python zou/debug.py
+```
+
+### 1.6 Start Zou Events Server (Port 5001)
+```bash
+# In a new terminal, navigate to zou directory
+workon zou
+cd zou
+
+# Start events server
+gunicorn --worker-class geventwebsocket.gunicorn.workers.GeventWebSocketWorker \
+    -b 127.0.0.1:5001 \
+    --log-level debug \
+    zou.events:app
+```
+
+## Part 2: Kitsu Frontend Setup
+
+### 2.1 Clone Kitsu Repository
+```bash
+git clone https://github.com/cgwire/kitsu.git
+cd kitsu
+```
+
+### 2.2 Install Dependencies
+```bash
+npm install
+```
+
+### 2.3 Configure Environment (Optional)
+Create `.env` file:
+```bash
+KITSU_API_TARGET=http://localhost:5000
+KITSU_EVENT_TARGET=http://localhost:5001
+```
+
+### 2.4 Start Kitsu Development Server
+```bash
+npm run dev
+```
+
+## Part 3: Verification
+
+### 3.1 Check Services
+Verify all services are running:
+- Zou API: http://localhost:5000/api
+- Zou Events: http://localhost:5001
+- Kitsu Frontend: http://localhost:8080
+
+### 3.2 Default Login
+- Email: admin@example.com
+- Password: mysecretpassword
+
+## Part 4: Cloud Deployment
+
+### 4.1 Quick Docker Deployment
+For a complete production-ready setup:
+```bash
+docker run -d -p 80:80 --name cgwire cgwire/cgwire
+```
+Access at: http://localhost
+
+### 4.2 Production Environment Variables
+For production deployment, configure:
+```bash
+# Database
+DB_HOST=your-production-db-host
+DB_PASSWORD=secure-production-password
+
+# Security
+SECRET_KEY=your-secure-secret-key
+AUTH_STRATEGY=auth_local_classic
+
+# Storage
+PREVIEW_FOLDER=/var/www/previews
+
+# External Services
+KV_HOST=your-redis-host
+INDEXER_KEY=your-meilisearch-key
+```
+
+### 4.3 Cloud Platform Deployment
+**AWS/GCP/Azure:**
+1. Deploy PostgreSQL database service
+2. Deploy Redis instance
+3. Deploy Meilisearch instance
+4. Deploy Zou API service
+5. Deploy Kitsu frontend with CDN
+6. Configure load balancer and SSL certificates
+
+**Docker Compose for Production:**
+Create `docker-compose.yml`:
+```yaml
+version: '3.8'
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_PASSWORD: mysecretpassword
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+  
+  redis:
+    image: redis:6
+  
+  meilisearch:
+    image: getmeili/meilisearch:v1.8.3
+    environment:
+      MEILI_MASTER_KEY: meilimasterkey
+  
+  zou:
+    image: cgwire/zou
+    ports:
+      - "5000:5000"
+    depends_on:
+      - postgres
+      - redis
+      - meilisearch
+  
+  kitsu:
+    image: cgwire/kitsu
+    ports:
+      - "80:80"
+    depends_on:
+      - zou
+
+volumes:
+  postgres_data:
+```
+
+## Part 5: Team Onboarding
+
+### 5.1 User Management
+1. Access admin panel at http://localhost:8080/admin
+2. Create team members accounts
+3. Assign appropriate permissions and roles
+4. Set up projects and production structure
+
+### 5.2 Project Setup
+1. Create new project in Kitsu
+2. Define asset types and shot structure
+3. Set up task templates
+4. Configure pipeline workflow
+
+### 5.3 Integration
+- Configure pipeline tools integration
+- Set up file naming conventions
+- Configure preview upload settings
+- Set up notification preferences
+
+## Troubleshooting
+
+### Common Issues:
+1. **Database Connection**: Ensure PostgreSQL is running and accessible
+2. **Port Conflicts**: Check if ports 5000, 5001, 8080 are available
+3. **Dependencies**: Ensure all Python and Node.js dependencies are installed
+4. **Permissions**: Check file system permissions for preview folders
+5. **Environment Variables**: Verify all required variables are set
+
+### Service Status Check:
+```bash
+# Check if services are running
+curl http://localhost:5000/api/auth/login
+curl http://localhost:5001
+curl http://localhost:8080
+```
+
+## Support Resources
+- Kitsu Documentation: https://kitsu.cg-wire.com/
+- Zou API Documentation: https://zou.cg-wire.com/
+- GitHub Issues: https://github.com/cgwire/kitsu/issues
+- Community Forum: CGWire Discord/Slack channels
